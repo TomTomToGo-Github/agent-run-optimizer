@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(py|ts|tsx|js\\)$\")",
+      "Bash(uv run *)"
+    ]
+  }
+}

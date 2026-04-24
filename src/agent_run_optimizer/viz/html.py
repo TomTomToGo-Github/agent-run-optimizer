@@ -222,7 +222,7 @@ _HTML_TEMPLATE = """\
         <div class="legend-row"><span class="lb-gold"></span> Required step</div>
         <div class="legend-row"><span class="lb-pink"></span> User-marked</div>
       </div>
-      <p class="tip">Click node to toggle important</p>
+      <p class="tip">Click node: required step &nbsp;&middot;&nbsp; Right-click: important</p>
     </div>
   </aside>
 
@@ -236,7 +236,7 @@ _HTML_TEMPLATE = """\
     <div class="detail-type"  id="d-type"></div>
     <div class="detail-badges" id="d-badges"></div>
     <dl class="detail-meta" id="d-meta"></dl>
-    <p class="detail-hint">Click again to toggle important</p>
+    <p class="detail-hint">Click: required step &nbsp;&middot;&nbsp; Right-click: important</p>
   </div>
 </main>
 
@@ -247,28 +247,24 @@ _HTML_TEMPLATE = """\
 const TEST_CASE_ID = __TEST_CASE_ID_JSON__;
 const ELEMENTS     = __ELEMENTS_JSON__;
 const PATHS        = __PATHS_JSON__;
-const FIXPOINTS    = new Set(__FIXPOINTS_JSON__);
 
 /* ── Lane layout constants ────────────────────────────────────────── */
 const LANE_W  = 210;   // horizontal distance between lane centres (model units)
 const LEVEL_H = 95;    // vertical distance per depth level (model units)
 
-/* ── Which paths contain each node ───────────────────────────────── */
-const nodePathMap = {};
-ELEMENTS.filter(e => !e.data.source).forEach(e => { nodePathMap[e.data.id] = []; });
-PATHS.forEach(p => p.nodes.forEach(id => {
-    if (nodePathMap[id] !== undefined) nodePathMap[id].push(p.id);
-}));
+/* ── Canonical ID → list of Cytoscape element IDs ─────────────────── */
+// Deviating nodes are duplicated per path; this map lets hover/click
+// find all copies of the same logical node.
+const canonicalToElements = {};
+ELEMENTS.filter(e => !e.data.source).forEach(e => {
+    const cid = e.data.canonical_id;
+    if (!canonicalToElements[cid]) canonicalToElements[cid] = [];
+    canonicalToElements[cid].push(e.data.id);
+});
 
 /* ── Lane assignment ──────────────────────────────────────────────── */
-// Center: fixpoints, or nodes shared by every path.
-// Otherwise: first path (by list order) that contains the node.
-function nodeLane(id) {
-    if (FIXPOINTS.has(id)) return 'center';
-    const inPaths = nodePathMap[id] || [];
-    if (inPaths.length === 0 || inPaths.length === PATHS.length) return 'center';
-    return inPaths[0];
-}
+// path_id null  → center lane (shared / fixpoint nodes)
+// path_id set   → the named path's lane (deviating nodes)
 
 // Paths alternate left / right of centre so the layout stays balanced.
 // e.g. 3 paths: path-0 → -LANE_W, path-1 → +LANE_W, path-2 → -2*LANE_W
@@ -308,8 +304,10 @@ const depth = computeDepths();
 /* ── Node positions ───────────────────────────────────────────────── */
 const nodePos = {};
 ELEMENTS.filter(e => !e.data.source).forEach(e => {
-    const id = e.data.id;
-    nodePos[id] = { x: laneX[nodeLane(id)] ?? 0, y: depth[id] * LEVEL_H };
+    nodePos[e.data.id] = {
+        x: laneX[e.data.path_id || 'center'] ?? 0,
+        y: depth[e.data.id] * LEVEL_H,
+    };
 });
 
 /* ── Cytoscape init ───────────────────────────────────────────────── */
@@ -356,6 +354,14 @@ const cy = cytoscape({
         {
             selector: 'node[?is_fixpoint][?user_important]',
             style: { 'border-width': 3, 'border-color': '#FFD700' }
+        },
+        {
+            selector: '.peer-hover',
+            style: {
+                'overlay-color':   '#ffffff',
+                'overlay-opacity': 0.25,
+                'overlay-padding': 5,
+            }
         },
         {
             selector: 'edge',
@@ -498,19 +504,45 @@ function clearHighlight() {
     cy.edges().removeStyle('line-color').removeStyle('target-arrow-color').removeStyle('width');
 }
 
-/* ── Node click ───────────────────────────────────────────────────── */
+/* ── Node interactions ────────────────────────────────────────────── */
 const detail  = document.getElementById('detail');
 const dLabel  = document.getElementById('d-label');
 const dType   = document.getElementById('d-type');
 const dBadges = document.getElementById('d-badges');
 const dMeta   = document.getElementById('d-meta');
 
+// Highlight all copies of the same logical node on hover
+cy.on('mouseover', 'node', e => {
+    const cid = e.target.data('canonical_id');
+    (canonicalToElements[cid] || []).forEach(id => cy.$id(id).addClass('peer-hover'));
+});
+cy.on('mouseout', 'node', e => {
+    const cid = e.target.data('canonical_id');
+    (canonicalToElements[cid] || []).forEach(id => cy.$id(id).removeClass('peer-hover'));
+});
+
+// Left-click: toggle required step (is_fixpoint) on all copies
 cy.on('tap', 'node', e => {
-    const node = e.target;
-    node.data('user_important', !node.data('user_important'));
+    const node   = e.target;
+    const cid    = node.data('canonical_id');
+    const newVal = !node.data('is_fixpoint');
+    (canonicalToElements[cid] || []).forEach(id => cy.$id(id).data('is_fixpoint', newVal));
     cy.style().update();
     renderDetail(node);
 });
+
+// Right-click: toggle important (user_important) on all copies
+cy.on('cxttap', 'node', e => {
+    const node   = e.target;
+    const cid    = node.data('canonical_id');
+    const newVal = !node.data('user_important');
+    (canonicalToElements[cid] || []).forEach(id => cy.$id(id).data('user_important', newVal));
+    cy.style().update();
+    renderDetail(node);
+});
+
+document.getElementById('cy').addEventListener('contextmenu', e => e.preventDefault());
+
 cy.on('tap', e => { if (e.target === cy) detail.classList.remove('open'); });
 
 function renderDetail(node) {
@@ -522,7 +554,7 @@ function renderDetail(node) {
         d.is_fixpoint    ? '<span class="dbadge dbadge-fixpoint">Required step</span>' : '',
         d.user_important ? '<span class="dbadge dbadge-important">Important</span>'    : '',
     ].join('');
-    dMeta.innerHTML = `<dt>ID</dt><dd>${d.id}</dd>` +
+    dMeta.innerHTML = `<dt>ID</dt><dd>${d.canonical_id}</dd>` +
         Object.entries(d.metadata || {})
             .map(([k, v]) => `<dt>${k}</dt><dd>${typeof v === 'object' ? JSON.stringify(v) : v}</dd>`)
             .join('');
@@ -531,7 +563,17 @@ function renderDetail(node) {
 /* ── Sync ─────────────────────────────────────────────────────────── */
 document.getElementById('sync-btn').addEventListener('click', async () => {
     const updates = {};
-    cy.nodes().forEach(n => { updates[n.id()] = { user_important: n.data('user_important') }; });
+    const seen    = new Set();
+    cy.nodes().forEach(n => {
+        const cid = n.data('canonical_id');
+        if (!seen.has(cid)) {
+            seen.add(cid);
+            updates[cid] = {
+                user_important: !!n.data('user_important'),
+                is_fixpoint:    !!n.data('is_fixpoint'),
+            };
+        }
+    });
     document.getElementById('sync-status').textContent = 'Syncing…';
     try {
         const res  = await fetch('/api/sync', {
@@ -563,67 +605,99 @@ function showToast(msg, type) {
 
 class HtmlViz:
     def generate_html(self, graph: RunGraph) -> str:
-        elements   = self._build_elements(graph)
-        paths_data = self._build_paths_data(graph)
-        fixpoints  = [nid for nid, n in graph.nodes.items() if n.is_fixpoint]
+        node_cy_map = self._compute_node_cy_map(graph)
+        elements    = self._build_elements(graph, node_cy_map)
+        paths_data  = self._build_paths_data(graph, node_cy_map)
 
         html = _HTML_TEMPLATE
-        html = html.replace("__TITLE__",           f"Run Graph — {graph.test_case_id}")
-        html = html.replace("__TEST_CASE_ID__",    graph.test_case_id)
-        html = html.replace("__DESCRIPTION__",     graph.description or "")
+        html = html.replace("__TITLE__",             f"Run Graph — {graph.test_case_id}")
+        html = html.replace("__TEST_CASE_ID__",      graph.test_case_id)
+        html = html.replace("__DESCRIPTION__",       graph.description or "")
         html = html.replace("__TEST_CASE_ID_JSON__", json.dumps(graph.test_case_id))
-        html = html.replace("__ELEMENTS_JSON__",   json.dumps(elements))
-        html = html.replace("__PATHS_JSON__",      json.dumps(paths_data))
-        html = html.replace("__FIXPOINTS_JSON__",  json.dumps(fixpoints))
+        html = html.replace("__ELEMENTS_JSON__",     json.dumps(elements))
+        html = html.replace("__PATHS_JSON__",        json.dumps(paths_data))
         return html
 
-    def _build_elements(self, graph: RunGraph) -> list[dict]:
-        elements: list[dict] = []
-
-        edge_paths: dict[tuple[str, str], list[str]] = {}
+    def _compute_node_cy_map(self, graph: RunGraph) -> dict[str, dict]:
+        """Maps node_id → {path_id → cy_id} for deviating nodes, {None → node_id} for shared."""
+        node_paths: dict[str, list[str]] = {nid: [] for nid in graph.nodes}
         for path in graph.paths:
-            for edge in path.edges:
-                edge_paths.setdefault((edge.source, edge.target), []).append(path.path_id)
+            for nid in path.node_sequence:
+                if nid in node_paths:
+                    node_paths[nid].append(path.path_id)
+
+        num_paths = len(graph.paths)
+        result: dict[str, dict] = {}
 
         for node_id, node in graph.nodes.items():
-            elements.append({
-                "data": {
-                    "id":             node_id,
-                    "label":          node.label,
-                    "type":           node.type.value,
-                    "is_fixpoint":    node.is_fixpoint,
-                    "user_important": node.user_important,
-                    "color":          _TYPE_COLORS.get(node.type, "#888"),
-                    "shape":          _TYPE_SHAPES.get(node.type, "ellipse"),
-                    "metadata":       node.metadata,
+            paths = node_paths.get(node_id, [])
+            shared = node.is_fixpoint or len(paths) == 0 or len(paths) >= num_paths
+            if shared:
+                result[node_id] = {None: node_id}
+            else:
+                result[node_id] = {
+                    path.path_id: f"{node_id}__{path.path_id}"
+                    for path in graph.paths
+                    if node_id in path.node_sequence
                 }
-            })
+
+        return result
+
+    def _build_elements(self, graph: RunGraph, node_cy_map: dict[str, dict]) -> list[dict]:
+        elements: list[dict] = []
+
+        for node_id, node in graph.nodes.items():
+            base = {
+                "label":          node.label,
+                "type":           node.type.value,
+                "is_fixpoint":    node.is_fixpoint,
+                "user_important": node.user_important,
+                "color":          _TYPE_COLORS.get(node.type, "#888"),
+                "shape":          _TYPE_SHAPES.get(node.type, "ellipse"),
+                "metadata":       node.metadata,
+                "canonical_id":   node_id,
+            }
+            for path_id, cy_id in node_cy_map[node_id].items():
+                elements.append({"data": {"id": cy_id, "path_id": path_id, **base}})
 
         seen: set[str] = set()
-        for (src, tgt), path_ids in edge_paths.items():
-            edge_id = f"{src}__{tgt}"
-            if edge_id not in seen:
-                seen.add(edge_id)
-                elements.append({
-                    "data": {
-                        "id":     edge_id,
-                        "source": src,
-                        "target": tgt,
-                        "paths":  path_ids,
-                    }
-                })
+        for path in graph.paths:
+            for edge in path.edges:
+                src_map = node_cy_map.get(edge.source, {})
+                tgt_map = node_cy_map.get(edge.target, {})
+                src_cy  = src_map.get(path.path_id) or src_map.get(None) or edge.source
+                tgt_cy  = tgt_map.get(path.path_id) or tgt_map.get(None) or edge.target
+                eid = f"{src_cy}__{tgt_cy}"
+                if eid not in seen:
+                    seen.add(eid)
+                    elements.append({
+                        "data": {"id": eid, "source": src_cy, "target": tgt_cy, "paths": [path.path_id]},
+                    })
 
         return elements
 
-    def _build_paths_data(self, graph: RunGraph) -> list[dict]:
-        return [
-            {
+    def _build_paths_data(self, graph: RunGraph, node_cy_map: dict[str, dict]) -> list[dict]:
+        result = []
+        for i, path in enumerate(graph.paths):
+            cy_nodes = []
+            for nid in path.node_sequence:
+                cy_map = node_cy_map.get(nid, {})
+                cy_nodes.append(cy_map.get(path.path_id) or cy_map.get(None) or nid)
+
+            cy_edges = []
+            for edge in path.edges:
+                src_map = node_cy_map.get(edge.source, {})
+                tgt_map = node_cy_map.get(edge.target, {})
+                src_cy  = src_map.get(path.path_id) or src_map.get(None) or edge.source
+                tgt_cy  = tgt_map.get(path.path_id) or tgt_map.get(None) or edge.target
+                cy_edges.append(f"{src_cy}__{tgt_cy}")
+
+            result.append({
                 "id":          path.path_id,
                 "outcome":     path.outcome,
                 "color":       _PATH_COLORS[i % len(_PATH_COLORS)],
-                "nodes":       path.node_sequence,
-                "edges":       [f"{e.source}__{e.target}" for e in path.edges],
+                "nodes":       cy_nodes,
+                "edges":       cy_edges,
                 "duration_ms": path.duration_ms,
-            }
-            for i, path in enumerate(graph.paths)
-        ]
+            })
+        return result
