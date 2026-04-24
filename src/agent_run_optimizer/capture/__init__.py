@@ -1,0 +1,1 @@
+"""Capture layer — OTel exporter, Claude Code hooks, LangChain callback."""

@@ -1,0 +1,1 @@
+"""Visualization — terminal, Mermaid, HTML."""
