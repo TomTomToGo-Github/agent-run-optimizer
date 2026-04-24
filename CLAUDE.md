@@ -40,4 +40,4 @@ Full dev commands → [`docs/DEVTOOLS.md`](docs/DEVTOOLS.md)
 
 | File | What it covers |
 |---|---|
-| [`runs/incident-resolution.yaml`](runs/incident-resolution.yaml) | Example run graph: 3 paths, 11 nodes, 3 fixpoints |
+| [`agent_runs/incident-resolution/`](agent_runs/test-incident-resolution/) | Example run graph: 3 paths, 12 nodes, 3 fixpoints — one YAML per path + METADATA.md |
