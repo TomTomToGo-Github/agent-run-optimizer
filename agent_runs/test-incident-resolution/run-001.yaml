@@ -41,6 +41,12 @@ nodes:
       avg_latency_ms: 1250
       avg_input_tokens: 850
       avg_output_tokens: 320
+    cost:
+      kind: llm
+      latency_ms: 1250.0
+      cost_usd: 0.0045
+      input_tokens: 850
+      output_tokens: 320
   tool-search:
     type: tool
     label: Search Alerts
@@ -51,6 +57,10 @@ nodes:
       avg_latency_ms: 230
       args_example:
         query: CPU spike production alerts last 1h
+    cost:
+      kind: tool
+      latency_ms: 230.0
+      cost_usd: 0.0008
   tool-read-logs:
     type: tool
     label: Read Log Files
@@ -61,6 +71,10 @@ nodes:
       avg_latency_ms: 180
       args_example:
         path: /var/log/app/error.log
+    cost:
+      kind: tool
+      latency_ms: 180.0
+      cost_usd: 0.0005
   llm-resolve:
     type: llm
     label: Generate Resolution
@@ -72,6 +86,12 @@ nodes:
       avg_latency_ms: 1800
       avg_input_tokens: 1200
       avg_output_tokens: 450
+    cost:
+      kind: llm
+      latency_ms: 1800.0
+      cost_usd: 0.0072
+      input_tokens: 1200
+      output_tokens: 450
   tool-apply-fix:
     type: tool
     label: Apply Fix
@@ -82,6 +102,10 @@ nodes:
       avg_latency_ms: 2200
       args_example:
         command: systemctl restart app-worker
+    cost:
+      kind: tool
+      latency_ms: 2200.0
+      cost_usd: 0.002
   llm-verify:
     type: llm
     label: Verify Resolution
@@ -93,3 +117,9 @@ nodes:
       avg_latency_ms: 950
       avg_input_tokens: 600
       avg_output_tokens: 180
+    cost:
+      kind: llm
+      latency_ms: 950.0
+      cost_usd: 0.003
+      input_tokens: 600
+      output_tokens: 180
