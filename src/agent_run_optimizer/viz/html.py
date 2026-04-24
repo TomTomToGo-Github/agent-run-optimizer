@@ -206,6 +206,96 @@ _HTML_TEMPLATE = """\
     #toast.show { opacity: 1; }
     #toast.success { background: #14532d; color: #86efac; }
     #toast.error   { background: #7f1d1d; color: #fca5a5; }
+
+    /* ── Cost overlay buttons ─────────────────────────────────────── */
+    #cost-btn-container {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .cost-btn {
+      position: absolute;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: #14532d;
+      color: #86efac;
+      border: 1px solid #166534;
+      font-size: 11px;
+      cursor: default;
+      pointer-events: auto;
+      padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700;
+      transition: background 0.12s;
+      line-height: 1;
+    }
+    .cost-btn:hover { background: #166534; border-color: #86efac; }
+
+    .path-cost-btn {
+      background: rgba(253,230,138,0.12);
+      color: #fde68a;
+      border: 1px solid rgba(253,230,138,0.35);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 16px;
+      cursor: pointer;
+      flex-shrink: 0;
+      font-weight: 700;
+      transition: background 0.12s;
+      line-height: 1.4;
+    }
+    .path-cost-btn:hover { background: rgba(253,230,138,0.25); }
+
+    .path-toggle-btn {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+      line-height: 1;
+      transition: color 0.15s, opacity 0.15s;
+    }
+
+    #path-controls { display: flex; gap: 6px; margin-bottom: 8px; }
+    .path-all-btn {
+      flex: 1;
+      background: #334155;
+      color: #94a3b8;
+      border: 1px solid #475569;
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .path-all-btn:hover { background: #3b4f6b; color: #e2e8f0; }
+
+    /* ── Cost popup ─────────────────────────────────────────────────── */
+    #cost-popup {
+      position: fixed;
+      z-index: 9998;
+      background: #14532d;
+      color: #d1fae5;
+      border: 1px solid #166534;
+      border-radius: 8px;
+      padding: 10px 14px;
+      min-width: 170px;
+      max-width: 260px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+      display: none;
+      font-size: 13px;
+      pointer-events: none;
+    }
+    #cost-popup.open { display: block; }
+    .cost-popup-title {
+      font-weight: 700; margin-bottom: 7px; font-size: 12px;
+      color: #86efac; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .cost-popup-row { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; }
+    .cost-popup-key { color: #6ee7b7; white-space: nowrap; }
+    .cost-popup-val { font-weight: 600; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -229,6 +319,10 @@ _HTML_TEMPLATE = """\
     </div>
     <div>
       <div class="sidebar-section-title">Paths</div>
+      <div id="path-controls">
+        <button id="disable-all-btn" class="path-all-btn">Disable all</button>
+        <button id="enable-all-btn"  class="path-all-btn">Enable all</button>
+      </div>
       <div id="path-list"></div>
       <p class="tip">Hover to highlight &nbsp;&middot;&nbsp; Click to lock</p>
     </div>
@@ -249,6 +343,7 @@ _HTML_TEMPLATE = """\
   <div id="cy-wrap">
     <div id="cy"></div>
     <svg id="lane-svg"></svg>
+    <div id="cost-btn-container"></div>
   </div>
 
   <div id="detail">
@@ -261,6 +356,7 @@ _HTML_TEMPLATE = """\
 </main>
 
 <div id="toast"></div>
+<div id="cost-popup"></div>
 
 <script>
 /* ── Injected data ────────────────────────────────────────────────── */
@@ -334,6 +430,7 @@ const CY_STYLE = [
 let cy               = null;
 let currentCaseId    = INITIAL_CASE_ID;
 let currentDrawLanes = null;
+let costBtnMap        = {};
 
 /* ── Static DOM refs ──────────────────────────────────────────────── */
 const detail  = document.getElementById('detail');
@@ -397,6 +494,70 @@ function computeDepths(elements) {
     return d;
 }
 
+/* ── Cost helpers ─────────────────────────────────────────────────── */
+function formatMs(ms) {
+    return ms >= 1000 ? (ms / 1000).toFixed(2) + 's' : Math.round(ms) + 'ms';
+}
+function formatUSD(usd) {
+    return usd >= 0.01 ? '$' + usd.toFixed(4) : '$' + usd.toFixed(6);
+}
+function pathTotalCost(path) {
+    const seen = new Set();
+    const total = {};
+    path.nodes.forEach(cyId => {
+        if (seen.has(cyId)) return;
+        seen.add(cyId);
+        const cost = cy.$id(cyId).data('cost');
+        if (!cost) return;
+        ['latency_ms','cost_usd','input_tokens','output_tokens'].forEach(k => {
+            if (cost[k] != null) total[k] = (total[k] || 0) + cost[k];
+        });
+    });
+    return total;
+}
+function showCostPopup(title, cost, clientX, clientY) {
+    const popup = document.getElementById('cost-popup');
+    const FIELDS = [
+        ['latency_ms',    'Latency',       v => formatMs(v)],
+        ['cost_usd',      'Cost',          v => formatUSD(v)],
+        ['input_tokens',  'Input tokens',  v => v.toLocaleString()],
+        ['output_tokens', 'Output tokens', v => v.toLocaleString()],
+    ];
+    let html = `<div class="cost-popup-title">${title}</div>`;
+    let hasAny = false;
+    FIELDS.forEach(([k, label, fmt]) => {
+        if (cost[k] != null) {
+            html += `<div class="cost-popup-row"><span class="cost-popup-key">${label}</span><span class="cost-popup-val">${fmt(cost[k])}</span></div>`;
+            hasAny = true;
+        }
+    });
+    const totalTok = (cost.input_tokens || 0) + (cost.output_tokens || 0);
+    if (cost.input_tokens != null || cost.output_tokens != null) {
+        html += `<div class="cost-popup-row" style="border-top:1px solid rgba(110,231,183,0.25);margin-top:3px;padding-top:3px"><span class="cost-popup-key">Total tokens</span><span class="cost-popup-val">${totalTok.toLocaleString()}</span></div>`;
+        hasAny = true;
+    }
+    if (!hasAny) html += '<div class="cost-popup-key">No cost data</div>';
+    popup.innerHTML = html;
+    popup.style.left = Math.min(clientX + 8, window.innerWidth - 280) + 'px';
+    popup.style.top  = Math.max(8, Math.min(clientY - 20, window.innerHeight - 180)) + 'px';
+    popup.classList.add('open');
+}
+function hideCostPopup() {
+    document.getElementById('cost-popup').classList.remove('open');
+}
+function updateCostOverlays() {
+    if (!cy) return;
+    cy.nodes().forEach(node => {
+        const btn = costBtnMap[node.data('id')];
+        if (!btn) return;
+        const pos = node.renderedPosition();
+        const hw  = node.renderedWidth()  / 2;
+        const hh  = node.renderedHeight() / 2;
+        btn.style.left = (pos.x + hw - 12) + 'px';
+        btn.style.top  = (pos.y - hh - 8)  + 'px';
+    });
+}
+
 /* ── Core graph initialization ────────────────────────────────────── */
 function initGraph(elements, paths, testCaseId, description) {
     currentCaseId = testCaseId;
@@ -413,6 +574,9 @@ function initGraph(elements, paths, testCaseId, description) {
     // Cleanup previous graph
     if (currentDrawLanes) window.removeEventListener('resize', currentDrawLanes);
     if (cy) { cy.destroy(); cy = null; }
+    costBtnMap = {};
+    document.getElementById('cost-btn-container').innerHTML = '';
+    hideCostPopup();
 
     /* ── canonical_id → list of cy element IDs ── */
     const canonicalToElements = {};
@@ -424,9 +588,11 @@ function initGraph(elements, paths, testCaseId, description) {
 
     /* ── Lane X positions ── */
     const laneX = { center: 0 };
+    const leftCount = Math.floor(paths.length / 2);
     paths.forEach((p, i) => {
-        const sign = (i % 2 === 0) ? -1 : 1;
-        laneX[p.id] = (Math.floor(i / 2) + 1) * sign * LANE_W;
+        laneX[p.id] = i < leftCount
+            ? (i - leftCount) * LANE_W
+            : (i - leftCount + 1) * LANE_W;
     });
 
     /* ── Node positions ── */
@@ -447,19 +613,35 @@ function initGraph(elements, paths, testCaseId, description) {
         layout: { name: 'preset', positions: nodePos, fit: true, padding: 70 },
     });
 
-    /* ── Lane divider overlay ── */
-    const sortedLanes = Object.entries(laneX).sort(([, a], [, b]) => a - b);
-    const dividers = [];
-    for (let i = 0; i < sortedLanes.length - 1; i++) {
-        dividers.push((sortedLanes[i][1] + sortedLanes[i + 1][1]) / 2);
-    }
+    /* ── Cost overlay buttons ── */
+    cy.nodes().forEach(node => {
+        const cost = node.data('cost');
+        if (!cost) return;
+        const btn = document.createElement('button');
+        btn.className = 'cost-btn';
+        btn.textContent = '$';
+        btn.addEventListener('mousedown', ev => ev.stopPropagation());
+        btn.addEventListener('mouseenter', ev => {
+            const r = ev.currentTarget.getBoundingClientRect();
+            showCostPopup(node.data('label'), cost, r.right, r.top + r.height / 2);
+        });
+        btn.addEventListener('mouseleave', hideCostPopup);
+        document.getElementById('cost-btn-container').appendChild(btn);
+        costBtnMap[node.data('id')] = btn;
+    });
 
+    /* ── Lane divider overlay ── */
     function mxToSx(mx) { return mx * cy.zoom() + cy.pan().x; }
 
     function drawLanes() {
         const W = cyWrap.clientWidth;
         const H = cyWrap.clientHeight;
         laneSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        const sortedLanes = Object.entries(laneX).sort(([, a], [, b]) => a - b);
+        const dividers = [];
+        for (let i = 0; i < sortedLanes.length - 1; i++) {
+            dividers.push((sortedLanes[i][1] + sortedLanes[i + 1][1]) / 2);
+        }
         const screenDiv = [-Infinity, ...dividers.map(mxToSx), Infinity];
         let out = '';
         sortedLanes.forEach(([laneId], i) => {
@@ -482,22 +664,84 @@ function initGraph(elements, paths, testCaseId, description) {
             const sx = mxToSx(mx);
             if (sx < 30 || sx > W - 30) return;
             const isCenter = laneId === 'center';
-            const label = isCenter ? '— required steps —' : laneId;
+            const label = isCenter ? '— ideal path —' : laneId;
             const color = isCenter ? '#94a3b8' : (paths.find(p => p.id === laneId)?.color || '#94a3b8');
-            out += `<text x="${sx.toFixed(1)}" y="22" text-anchor="middle"
-                          fill="${color}" font-size="14" font-family="system-ui,sans-serif"
-                          font-weight="600" opacity="0.85" letter-spacing="0.04em">${label}</text>`;
+            out += `<text x="${sx.toFixed(1)}" y="24" text-anchor="middle"
+                          fill="${color}" font-size="16" font-family="system-ui,sans-serif"
+                          font-weight="700" opacity="1" letter-spacing="0.06em">${label}</text>`;
         });
         laneSvg.innerHTML = out;
+        updateCostOverlays();
     }
 
     currentDrawLanes = drawLanes;
     cy.on('render', drawLanes);
     window.addEventListener('resize', drawLanes);
 
+    /* ── Path visibility ── */
+    let hiddenPaths = new Set();
+    const elemById = {};
+    elements.forEach(e => { if (e.data && e.data.id) elemById[e.data.id] = e.data; });
+    const sharedNodePaths = {};
+    paths.forEach(path => {
+        path.nodes.forEach(cyId => {
+            const ed = elemById[cyId];
+            if (ed && ed.path_id === null) {
+                if (!sharedNodePaths[ed.canonical_id]) sharedNodePaths[ed.canonical_id] = [];
+                if (!sharedNodePaths[ed.canonical_id].includes(path.id))
+                    sharedNodePaths[ed.canonical_id].push(path.id);
+            }
+        });
+    });
+    function updatePathVisibility() {
+        cy.nodes().forEach(node => {
+            const pathId = node.data('path_id');
+            let hide;
+            if (pathId !== null) {
+                hide = hiddenPaths.has(pathId);
+            } else {
+                const cid = node.data('canonical_id');
+                const nodePaths = sharedNodePaths[cid] || [];
+                hide = nodePaths.length > 0 && nodePaths.every(p => hiddenPaths.has(p));
+            }
+            node.style('display', hide ? 'none' : 'element');
+            const btn = costBtnMap[node.data('id')];
+            if (btn) btn.style.display = hide ? 'none' : '';
+        });
+        cy.edges().forEach(edge => {
+            const edgePaths = edge.data('paths') || [];
+            const hide = edgePaths.length > 0 && edgePaths.every(p => hiddenPaths.has(p));
+            edge.style('display', hide ? 'none' : 'element');
+        });
+    }
+    function relayout() {
+        const visiblePaths = paths.filter(p => !hiddenPaths.has(p.id));
+        const newLeftCount = Math.floor(visiblePaths.length / 2);
+        Object.keys(laneX).forEach(k => { if (k !== 'center') delete laneX[k]; });
+        visiblePaths.forEach((p, i) => {
+            laneX[p.id] = i < newLeftCount
+                ? (i - newLeftCount) * LANE_W
+                : (i - newLeftCount + 1) * LANE_W;
+        });
+        cy.nodes().forEach(node => {
+            if (node.style('display') === 'none') return;
+            const pathId = node.data('path_id');
+            const targetX = (node.data('is_fixpoint') || pathId === null)
+                ? 0 : (laneX[pathId] ?? 0);
+            node.animate({ position: { x: targetX, y: node.position('y') } }, { duration: 300 });
+        });
+        setTimeout(() => cy.fit(undefined, 70), 320);
+        drawLanes();
+    }
+    function applyPathVisibility() {
+        updatePathVisibility();
+        relayout();
+    }
+
     /* ── Path list ── */
     let lockedPath = null;
     const pathList = document.getElementById('path-list');
+    const toggleBtnByPath = {};
 
     function highlightPath(path) {
         cy.edges().removeStyle('line-color').removeStyle('target-arrow-color').removeStyle('width');
@@ -525,6 +769,37 @@ function initGraph(elements, paths, testCaseId, description) {
             <span class="path-label">${path.id}</span>
             <span class="path-outcome outcome-${path.outcome}">${path.outcome}</span>
         `;
+        const pathCostBtn = document.createElement('button');
+        pathCostBtn.className = 'path-cost-btn';
+        pathCostBtn.textContent = '$';
+        pathCostBtn.addEventListener('mousedown', ev => ev.stopPropagation());
+        pathCostBtn.addEventListener('mouseenter', ev => {
+            const r = ev.currentTarget.getBoundingClientRect();
+            showCostPopup(path.id + ' — total', pathTotalCost(path), r.right, r.top + r.height / 2);
+        });
+        pathCostBtn.addEventListener('mouseleave', hideCostPopup);
+        item.appendChild(pathCostBtn);
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'path-toggle-btn';
+        toggleBtn.textContent = '●';
+        toggleBtn.style.color = path.color;
+        toggleBtn.addEventListener('click', ev => {
+            ev.stopPropagation();
+            if (hiddenPaths.has(path.id)) {
+                hiddenPaths.delete(path.id);
+                toggleBtn.textContent = '●';
+                toggleBtn.style.color = path.color;
+                item.style.opacity = '1';
+            } else {
+                hiddenPaths.add(path.id);
+                toggleBtn.textContent = '○';
+                toggleBtn.style.color = '#64748b';
+                item.style.opacity = '0.45';
+            }
+            applyPathVisibility();
+        });
+        toggleBtnByPath[path.id] = toggleBtn;
+        item.insertBefore(toggleBtn, item.firstChild);
         item.addEventListener('mouseenter', () => { if (!lockedPath) highlightPath(path); });
         item.addEventListener('mouseleave', () => { if (!lockedPath) clearHighlight(); });
         item.addEventListener('click', () => {
@@ -542,6 +817,25 @@ function initGraph(elements, paths, testCaseId, description) {
         pathList.appendChild(item);
     });
 
+    document.getElementById('disable-all-btn').onclick = () => {
+        paths.forEach(p => {
+            hiddenPaths.add(p.id);
+            const b = toggleBtnByPath[p.id];
+            if (b) { b.textContent = '○'; b.style.color = '#64748b'; }
+        });
+        document.querySelectorAll('#path-list .path-item').forEach(el => el.style.opacity = '0.45');
+        applyPathVisibility();
+    };
+    document.getElementById('enable-all-btn').onclick = () => {
+        hiddenPaths.clear();
+        paths.forEach(p => {
+            const b = toggleBtnByPath[p.id];
+            if (b) { b.textContent = '●'; b.style.color = p.color; }
+        });
+        document.querySelectorAll('#path-list .path-item').forEach(el => el.style.opacity = '1');
+        applyPathVisibility();
+    };
+
     /* ── Node interactions ── */
     cy.on('mouseover', 'node', e => {
         const cid = e.target.data('canonical_id');
@@ -555,7 +849,12 @@ function initGraph(elements, paths, testCaseId, description) {
         const node   = e.target;
         const cid    = node.data('canonical_id');
         const newVal = !node.data('is_fixpoint');
-        (canonicalToElements[cid] || []).forEach(id => cy.$id(id).data('is_fixpoint', newVal));
+        (canonicalToElements[cid] || []).forEach(id => {
+            const n = cy.$id(id);
+            n.data('is_fixpoint', newVal);
+            const targetX = newVal ? 0 : (nodePos[id]?.x ?? n.position('x'));
+            n.animate({ position: { x: targetX, y: n.position('y') } }, { duration: 280 });
+        });
         cy.style().update();
         renderDetail(node);
     });
@@ -718,6 +1017,7 @@ class HtmlViz:
                 "shape":          _TYPE_SHAPES.get(node.type, "ellipse"),
                 "metadata":       node.metadata,
                 "canonical_id":   node_id,
+                "cost":           node.cost.model_dump(exclude_none=True) if node.cost else None,
             }
             for path_id, cy_id in node_cy_map[node_id].items():
                 elements.append({"data": {"id": cy_id, "path_id": path_id, **base}})

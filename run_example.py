@@ -96,13 +96,12 @@ def _make_handler(html_content: str, store: RunStoreBase, viz: HtmlViz):
 
 
 def serve_and_open(
-    test_case_id: str,
     store: RunStoreBase,
     port: int | None = None,
 ) -> None:
     viz   = HtmlViz()
     cases = store.list_test_cases()
-    graph = store.load(test_case_id)
+    graph = store.load(cases[0])
     html  = viz.generate_html(graph, cases=cases)
 
     port    = port or _find_free_port()
@@ -115,7 +114,6 @@ def serve_and_open(
     url = f"http://localhost:{port}"
     print()
     print("  AI Run Graph Visualization")
-    print(f"  Test case : {test_case_id}")
     print(f"  Cases     : {', '.join(sorted(cases))}")
     print(f"  Store     : {store.__class__.__name__}")
     print()
@@ -135,7 +133,7 @@ def serve_and_open(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Visualize a run graph from a YAML store.")
-    parser.add_argument("--test-case", default="incident-resolution", help="Initial test case to display")
+    # parser.add_argument("--test-case", default="incident-resolution", help="Initial test case to display")
     parser.add_argument("--runs-dir",  default="agent_runs",          help="Root directory containing agent run folders")
     parser.add_argument("--port",      type=int, default=None,        help="Local port (auto-selected if omitted)")
     args = parser.parse_args()
@@ -145,7 +143,7 @@ def main() -> None:
     # e.g. store = PostgresRunStore(dsn=os.environ["DATABASE_URL"])
     # ──────────────────────────────────────────────────────────────────
 
-    serve_and_open(test_case_id=args.test_case, store=store, port=args.port)
+    serve_and_open(store=store, port=args.port)
 
 
 if __name__ == "__main__":

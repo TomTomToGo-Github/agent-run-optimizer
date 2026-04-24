@@ -53,6 +53,12 @@ nodes:
       avg_latency_ms: 1250
       avg_input_tokens: 850
       avg_output_tokens: 320
+    cost:
+      kind: llm
+      latency_ms: 1250.0
+      cost_usd: 0.0045
+      input_tokens: 850
+      output_tokens: 320
   tool-search:
     type: tool
     label: Search Alerts
@@ -63,6 +69,10 @@ nodes:
       avg_latency_ms: 230
       args_example:
         query: CPU spike production alerts last 1h
+    cost:
+      kind: tool
+      latency_ms: 230.0
+      cost_usd: 0.0008
   tool-read-logs:
     type: tool
     label: Read Log Files
@@ -73,6 +83,10 @@ nodes:
       avg_latency_ms: 180
       args_example:
         path: /var/log/app/error.log
+    cost:
+      kind: tool
+      latency_ms: 180.0
+      cost_usd: 0.0005
   llm-resolve:
     type: llm
     label: Generate Resolution
@@ -84,6 +98,12 @@ nodes:
       avg_latency_ms: 1800
       avg_input_tokens: 1200
       avg_output_tokens: 450
+    cost:
+      kind: llm
+      latency_ms: 1800.0
+      cost_usd: 0.0072
+      input_tokens: 1200
+      output_tokens: 450
   llm-verify:
     type: llm
     label: Verify Resolution
@@ -95,6 +115,12 @@ nodes:
       avg_latency_ms: 950
       avg_input_tokens: 600
       avg_output_tokens: 180
+    cost:
+      kind: llm
+      latency_ms: 950.0
+      cost_usd: 0.003
+      input_tokens: 600
+      output_tokens: 180
   tool-validate-logs:
     type: tool
     label: Validate Log Entry
@@ -105,6 +131,10 @@ nodes:
       avg_latency_ms: 140
       args_example:
         log_line: 'OOMKilled: app-worker exceeded memory limit'
+    cost:
+      kind: tool
+      latency_ms: 140.0
+      cost_usd: 0.0003
   llm-assess:
     type: llm
     label: Assess Finding
@@ -116,6 +146,12 @@ nodes:
       avg_latency_ms: 980
       avg_input_tokens: 720
       avg_output_tokens: 210
+    cost:
+      kind: llm
+      latency_ms: 980.0
+      cost_usd: 0.0042
+      input_tokens: 720
+      output_tokens: 210
   tool-search-refined:
     type: tool
     label: Refined Search
@@ -126,6 +162,10 @@ nodes:
       avg_latency_ms: 195
       args_example:
         query: OOMKilled app-worker memory limit last 6h
+    cost:
+      kind: tool
+      latency_ms: 195.0
+      cost_usd: 0.0008
   llm-correlate:
     type: llm
     label: Correlate Results
@@ -137,6 +177,12 @@ nodes:
       avg_latency_ms: 1340
       avg_input_tokens: 1050
       avg_output_tokens: 390
+    cost:
+      kind: llm
+      latency_ms: 1340.0
+      cost_usd: 0.0061
+      input_tokens: 1050
+      output_tokens: 390
   llm-deep-analyze:
     type: llm
     label: Deep Analysis
@@ -148,3 +194,9 @@ nodes:
       avg_latency_ms: 2100
       avg_input_tokens: 1400
       avg_output_tokens: 680
+    cost:
+      kind: llm
+      latency_ms: 2100.0
+      cost_usd: 0.0095
+      input_tokens: 1400
+      output_tokens: 680

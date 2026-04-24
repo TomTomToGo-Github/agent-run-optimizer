@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from agent_run_optimizer.graph.models import EdgeType, NodeType, RunEdge, RunGraph, RunNode, RunPath
+from agent_run_optimizer.graph.models import (
+    CheckpointCost,
+    EdgeType,
+    HumanCost,
+    LLMCost,
+    NodeCost,
+    NodeType,
+    RunEdge,
+    RunGraph,
+    RunNode,
+    RunPath,
+    ToolCost,
+)
 
 SCHEMA_VERSION = "2"
 
@@ -52,6 +64,7 @@ def path_dicts_to_graph(path_dicts: list[dict]) -> RunGraph:
                 is_fixpoint=nd.get("is_fixpoint", False),
                 user_important=nd.get("user_important", False),
                 metadata=nd.get("metadata", {}),
+                cost=_parse_cost(nd.get("cost")),
             )
         edges = [
             RunEdge(
@@ -121,13 +134,25 @@ def metadata_md(graph: RunGraph) -> str:
 
 
 def _node_to_dict(n: RunNode) -> dict:
-    return {
+    d: dict = {
         "type":           n.type.value,
         "label":          n.label,
         "is_fixpoint":    n.is_fixpoint,
         "user_important": n.user_important,
         "metadata":       n.metadata,
     }
+    if n.cost is not None:
+        d["cost"] = n.cost.model_dump(exclude_none=True)
+    return d
+
+
+def _parse_cost(data: dict | None) -> NodeCost | None:
+    if not data:
+        return None
+    kind = data.get("kind", "base")
+    kw = {k: v for k, v in data.items() if k != "kind"}
+    _CLASSES = {"llm": LLMCost, "tool": ToolCost, "human": HumanCost, "checkpoint": CheckpointCost}
+    return _CLASSES.get(kind, NodeCost)(**kw)
 
 
 def _edge_to_dict(e: RunEdge) -> dict:

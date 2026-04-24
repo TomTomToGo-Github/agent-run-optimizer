@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,29 @@ class EdgeType(str, Enum):
     PARALLEL = "parallel"
 
 
+class NodeCost(BaseModel):
+    latency_ms: float | None = None
+    cost_usd: float | None = None
+
+
+class LLMCost(NodeCost):
+    kind: Literal["llm"] = "llm"
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+class ToolCost(NodeCost):
+    kind: Literal["tool"] = "tool"
+
+
+class HumanCost(NodeCost):
+    kind: Literal["human"] = "human"
+
+
+class CheckpointCost(NodeCost):
+    kind: Literal["checkpoint"] = "checkpoint"
+
+
 class RunNode(BaseModel):
     id: str
     type: NodeType
@@ -28,6 +51,7 @@ class RunNode(BaseModel):
     is_fixpoint: bool = False
     user_important: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
+    cost: NodeCost | None = None
 
 
 class RunEdge(BaseModel):
