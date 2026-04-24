@@ -31,7 +31,7 @@ _HTML_TEMPLATE = """\
   <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { overflow: auto; }   /* scrollbars appear here when window is too small */
+    html { overflow: auto; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
       background: #f0f4f8;
@@ -57,28 +57,44 @@ _HTML_TEMPLATE = """\
     }
     header h1 { font-size: 17px; font-weight: 600; white-space: nowrap; }
     .header-meta { font-size: 12px; color: #94a3b8; margin-top: 2px; max-width: 600px; }
-    .controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    /* ── Case selector + sync (live in sidebar) ──────────────────── */
+    #case-select {
+      width: 100%;
+      background: #334155;
+      color: #e2e8f0;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 20px;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    #case-select:hover { background: #3b4f6b; }
+    #case-select:focus { outline: none; }
+    #case-select:disabled { opacity: 0.5; cursor: wait; }
 
+    .sync-row { display: flex; align-items: center; gap: 8px; }
     #sync-btn {
+      flex: 1;
       background: #3b82f6;
       color: #fff;
       border: none;
       border-radius: 6px;
-      padding: 7px 15px;
-      font-size: 13px;
+      padding: 7px 10px;
+      font-size: 20px;
       font-weight: 500;
       cursor: pointer;
       transition: background 0.15s;
     }
     #sync-btn:hover { background: #2563eb; }
-    #sync-status { font-size: 12px; color: #86efac; }
+    #sync-status { font-size: 18px; color: #86efac; white-space: nowrap; }
 
     /* ── Main layout ──────────────────────────────────────────────── */
     main { display: flex; flex: 1; overflow: hidden; }
 
     /* ── Sidebar ──────────────────────────────────────────────────── */
     #sidebar {
-      width: 240px;
+      width: 480px;
       flex-shrink: 0;
       background: #1e293b;
       color: #e2e8f0;
@@ -89,7 +105,7 @@ _HTML_TEMPLATE = """\
       gap: 22px;
     }
     .sidebar-section-title {
-      font-size: 12px;
+      font-size: 18px;
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: #64748b;
@@ -105,7 +121,7 @@ _HTML_TEMPLATE = """\
       padding: 7px 8px;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 15px;
+      font-size: 22px;
       transition: background 0.1s;
       user-select: none;
     }
@@ -114,7 +130,7 @@ _HTML_TEMPLATE = """\
     .path-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; }
     .path-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .path-outcome {
-      font-size: 13px;
+      font-size: 20px;
       padding: 2px 6px;
       border-radius: 4px;
       font-weight: 600;
@@ -127,7 +143,7 @@ _HTML_TEMPLATE = """\
 
     /* ── Legend ───────────────────────────────────────────────────── */
     .legend { display: flex; flex-direction: column; gap: 8px; }
-    .legend-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .legend-row { display: flex; align-items: center; gap: 8px; font-size: 20px; }
     .lc { width: 14px; height: 10px; border-radius: 3px; flex-shrink: 0; }
     .lc-diamond {
       width: 10px; height: 10px;
@@ -140,7 +156,7 @@ _HTML_TEMPLATE = """\
     .lb-gold  { width: 14px; height: 10px; border: 2px solid #FFD700; border-radius: 3px; flex-shrink: 0; }
     .lb-pink  { width: 14px; height: 10px; border: 2px dashed #FF4081; border-radius: 3px; flex-shrink: 0; }
 
-    .tip { font-size: 10px; color: #475569; margin-top: 4px; line-height: 1.4; }
+    .tip { font-size: 15px; color: #475569; margin-top: 4px; line-height: 1.4; }
 
     /* ── Graph canvas ─────────────────────────────────────────────── */
     #cy-wrap { flex: 1; position: relative; overflow: hidden; }
@@ -196,17 +212,21 @@ _HTML_TEMPLATE = """\
 
 <header>
   <div>
-    <h1>Run Graph &mdash; __TEST_CASE_ID__</h1>
-    <div class="header-meta">__DESCRIPTION__</div>
-  </div>
-  <div class="controls">
-    <span id="sync-status"></span>
-    <button id="sync-btn">&#x21BB; Sync to Store</button>
+    <h1>Run Graph &mdash; <span id="case-title">__TEST_CASE_ID__</span></h1>
+    <div class="header-meta" id="case-description">__DESCRIPTION__</div>
   </div>
 </header>
 
 <main>
   <aside id="sidebar">
+    <div>
+      <div class="sidebar-section-title">Agent Run</div>
+      <select id="case-select"></select>
+      <div class="sync-row">
+        <button id="sync-btn">&#x21BB; Sync to Store</button>
+        <span id="sync-status"></span>
+      </div>
+    </div>
     <div>
       <div class="sidebar-section-title">Paths</div>
       <div id="path-list"></div>
@@ -244,41 +264,118 @@ _HTML_TEMPLATE = """\
 
 <script>
 /* ── Injected data ────────────────────────────────────────────────── */
-const TEST_CASE_ID = __TEST_CASE_ID_JSON__;
-const ELEMENTS     = __ELEMENTS_JSON__;
-const PATHS        = __PATHS_JSON__;
+const INITIAL_CASE_ID  = __TEST_CASE_ID_JSON__;
+const INITIAL_ELEMENTS = __ELEMENTS_JSON__;
+const INITIAL_PATHS    = __PATHS_JSON__;
+const INITIAL_DESC     = __DESCRIPTION_JSON__;
+const CASES            = __CASES_JSON__;
 
-/* ── Lane layout constants ────────────────────────────────────────── */
-const LANE_W  = 210;   // horizontal distance between lane centres (model units)
-const LEVEL_H = 95;    // vertical distance per depth level (model units)
+/* ── Constants ────────────────────────────────────────────────────── */
+const LANE_W  = 210;
+const LEVEL_H = 95;
 
-/* ── Canonical ID → list of Cytoscape element IDs ─────────────────── */
-// Deviating nodes are duplicated per path; this map lets hover/click
-// find all copies of the same logical node.
-const canonicalToElements = {};
-ELEMENTS.filter(e => !e.data.source).forEach(e => {
-    const cid = e.data.canonical_id;
-    if (!canonicalToElements[cid]) canonicalToElements[cid] = [];
-    canonicalToElements[cid].push(e.data.id);
+/* ── Cytoscape style (static across graphs) ───────────────────────── */
+const CY_STYLE = [
+    {
+        selector: 'node',
+        style: {
+            'label':            'data(label)',
+            'background-color': 'data(color)',
+            'color':            '#1a202c',
+            'text-valign':      'center',
+            'text-halign':      'center',
+            'font-size':        '13px',
+            'font-family':      'system-ui, sans-serif',
+            'font-weight':      '600',
+            'width':            130,
+            'height':           58,
+            'shape':            'data(shape)',
+            'border-width':     0,
+        }
+    },
+    {
+        selector: 'node[?is_fixpoint]',
+        style: { 'border-width': 3, 'border-color': '#FFD700', 'border-style': 'solid' }
+    },
+    {
+        selector: 'node[?user_important]',
+        style: {
+            'overlay-color':   '#FF4081',
+            'overlay-opacity': 0.22,
+            'overlay-padding': 7,
+            'border-width':    3,
+            'border-color':    '#FF4081',
+            'border-style':    'dashed',
+        }
+    },
+    {
+        selector: 'node[?is_fixpoint][?user_important]',
+        style: { 'border-width': 3, 'border-color': '#FFD700' }
+    },
+    {
+        selector: '.peer-hover',
+        style: { 'overlay-color': '#ffffff', 'overlay-opacity': 0.25, 'overlay-padding': 5 }
+    },
+    {
+        selector: 'edge',
+        style: {
+            'width':              2,
+            'line-color':         '#94a3b8',
+            'target-arrow-color': '#94a3b8',
+            'target-arrow-shape': 'triangle',
+            'curve-style':        'bezier',
+        }
+    },
+    { selector: '.dimmed',                       style: { 'opacity': 0.1  } },
+    { selector: 'node[?is_fixpoint].dimmed',     style: { 'opacity': 0.45 } },
+];
+
+/* ── Module-level state ───────────────────────────────────────────── */
+let cy               = null;
+let currentCaseId    = INITIAL_CASE_ID;
+let currentDrawLanes = null;
+
+/* ── Static DOM refs ──────────────────────────────────────────────── */
+const detail  = document.getElementById('detail');
+const dLabel  = document.getElementById('d-label');
+const dType   = document.getElementById('d-type');
+const dBadges = document.getElementById('d-badges');
+const dMeta   = document.getElementById('d-meta');
+const laneSvg = document.getElementById('lane-svg');
+const cyWrap  = document.getElementById('cy-wrap');
+
+/* ── Case dropdown ────────────────────────────────────────────────── */
+const caseSelect = document.getElementById('case-select');
+CASES.forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = id;
+    opt.selected = (id === INITIAL_CASE_ID);
+    caseSelect.appendChild(opt);
 });
+caseSelect.addEventListener('change', () => loadTestCase(caseSelect.value));
 
-/* ── Lane assignment ──────────────────────────────────────────────── */
-// path_id null  → center lane (shared / fixpoint nodes)
-// path_id set   → the named path's lane (deviating nodes)
+/* ── Load a test case from the server ────────────────────────────── */
+async function loadTestCase(testCaseId) {
+    caseSelect.disabled = true;
+    try {
+        const res = await fetch(`/api/graph?id=${encodeURIComponent(testCaseId)}`);
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        initGraph(data.elements, data.paths, data.test_case_id, data.description);
+    } catch (err) {
+        showToast('Load failed: ' + err.message, 'error');
+        caseSelect.value = currentCaseId;
+    } finally {
+        caseSelect.disabled = false;
+    }
+}
 
-// Paths alternate left / right of centre so the layout stays balanced.
-// e.g. 3 paths: path-0 → -LANE_W, path-1 → +LANE_W, path-2 → -2*LANE_W
-const laneX = { center: 0 };
-PATHS.forEach((p, i) => {
-    const sign  = (i % 2 === 0) ? -1 : 1;
-    const steps = Math.floor(i / 2) + 1;
-    laneX[p.id] = sign * steps * LANE_W;
-});
-
-/* ── Critical-path depths (longest path from root) ───────────────── */
-function computeDepths() {
-    const nodes = ELEMENTS.filter(e => !e.data.source).map(e => e.data.id);
-    const edges  = ELEMENTS.filter(e =>  e.data.source);
+/* ── Depth computation (pure) ─────────────────────────────────────── */
+function computeDepths(elements) {
+    const nodes = elements.filter(e => !e.data.source).map(e => e.data.id);
+    const edges  = elements.filter(e =>  e.data.source);
     const adj = {}, inDeg = {};
     nodes.forEach(n => { adj[n] = []; inDeg[n] = 0; });
     edges.forEach(e => {
@@ -299,252 +396,181 @@ function computeDepths() {
     }
     return d;
 }
-const depth = computeDepths();
 
-/* ── Node positions ───────────────────────────────────────────────── */
-const nodePos = {};
-ELEMENTS.filter(e => !e.data.source).forEach(e => {
-    nodePos[e.data.id] = {
-        x: laneX[e.data.path_id || 'center'] ?? 0,
-        y: depth[e.data.id] * LEVEL_H,
-    };
-});
+/* ── Core graph initialization ────────────────────────────────────── */
+function initGraph(elements, paths, testCaseId, description) {
+    currentCaseId = testCaseId;
 
-/* ── Cytoscape init ───────────────────────────────────────────────── */
-const cy = cytoscape({
-    container: document.getElementById('cy'),
-    elements:  ELEMENTS,
-    style: [
-        {
-            selector: 'node',
-            style: {
-                'label':            'data(label)',
-                'background-color': 'data(color)',
-                'color':            '#1a202c',
-                'text-valign':      'center',
-                'text-halign':      'center',
-                'font-size':        '13px',
-                'font-family':      'system-ui, sans-serif',
-                'font-weight':      '600',
-                'width':            130,
-                'height':           58,
-                'shape':            'data(shape)',
-                'border-width':     0,
-            }
-        },
-        {
-            selector: 'node[?is_fixpoint]',
-            style: {
-                'border-width': 3,
-                'border-color': '#FFD700',
-                'border-style': 'solid',
-            }
-        },
-        {
-            selector: 'node[?user_important]',
-            style: {
-                'overlay-color':   '#FF4081',
-                'overlay-opacity': 0.22,
-                'overlay-padding': 7,
-                'border-width':    3,
-                'border-color':    '#FF4081',
-                'border-style':    'dashed',
-            }
-        },
-        {
-            selector: 'node[?is_fixpoint][?user_important]',
-            style: { 'border-width': 3, 'border-color': '#FFD700' }
-        },
-        {
-            selector: '.peer-hover',
-            style: {
-                'overlay-color':   '#ffffff',
-                'overlay-opacity': 0.25,
-                'overlay-padding': 5,
-            }
-        },
-        {
-            selector: 'edge',
-            style: {
-                'width':              2,
-                'line-color':         '#94a3b8',
-                'target-arrow-color': '#94a3b8',
-                'target-arrow-shape': 'triangle',
-                'curve-style':        'bezier',
-            }
-        },
-        {
-            selector: '.dimmed',
-            style: { 'opacity': 0.1 }
-        },
-        {
-            selector: 'node[?is_fixpoint].dimmed',
-            style: { 'opacity': 0.45 }
-        },
-    ],
-    layout: {
-        name:     'preset',
-        positions: nodePos,
-        fit:      true,
-        padding:  70,
+    // Update header
+    document.getElementById('case-title').textContent = testCaseId;
+    document.getElementById('case-description').textContent = description || '';
+    document.title = `Run Graph — ${testCaseId}`;
+
+    // Reset UI state
+    detail.classList.remove('open');
+    document.getElementById('path-list').innerHTML = '';
+
+    // Cleanup previous graph
+    if (currentDrawLanes) window.removeEventListener('resize', currentDrawLanes);
+    if (cy) { cy.destroy(); cy = null; }
+
+    /* ── canonical_id → list of cy element IDs ── */
+    const canonicalToElements = {};
+    elements.filter(e => !e.data.source).forEach(e => {
+        const cid = e.data.canonical_id;
+        if (!canonicalToElements[cid]) canonicalToElements[cid] = [];
+        canonicalToElements[cid].push(e.data.id);
+    });
+
+    /* ── Lane X positions ── */
+    const laneX = { center: 0 };
+    paths.forEach((p, i) => {
+        const sign = (i % 2 === 0) ? -1 : 1;
+        laneX[p.id] = (Math.floor(i / 2) + 1) * sign * LANE_W;
+    });
+
+    /* ── Node positions ── */
+    const depth = computeDepths(elements);
+    const nodePos = {};
+    elements.filter(e => !e.data.source).forEach(e => {
+        nodePos[e.data.id] = {
+            x: laneX[e.data.path_id || 'center'] ?? 0,
+            y: depth[e.data.id] * LEVEL_H,
+        };
+    });
+
+    /* ── Cytoscape instance ── */
+    cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements,
+        style:  CY_STYLE,
+        layout: { name: 'preset', positions: nodePos, fit: true, padding: 70 },
+    });
+
+    /* ── Lane divider overlay ── */
+    const sortedLanes = Object.entries(laneX).sort(([, a], [, b]) => a - b);
+    const dividers = [];
+    for (let i = 0; i < sortedLanes.length - 1; i++) {
+        dividers.push((sortedLanes[i][1] + sortedLanes[i + 1][1]) / 2);
     }
-});
 
-/* ── Lane divider overlay ─────────────────────────────────────────── */
-const laneSvg = document.getElementById('lane-svg');
-const cyWrap  = document.getElementById('cy-wrap');
+    function mxToSx(mx) { return mx * cy.zoom() + cy.pan().x; }
 
-// Sorted lanes by x-position for boundary computation
-const sortedLanes = Object.entries(laneX).sort(([, a], [, b]) => a - b);
+    function drawLanes() {
+        const W = cyWrap.clientWidth;
+        const H = cyWrap.clientHeight;
+        laneSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        const screenDiv = [-Infinity, ...dividers.map(mxToSx), Infinity];
+        let out = '';
+        sortedLanes.forEach(([laneId], i) => {
+            if (laneId === 'center') return;
+            const path = paths.find(p => p.id === laneId);
+            if (!path) return;
+            const x1 = Math.max(0, screenDiv[i]);
+            const x2 = Math.min(W, screenDiv[i + 1]);
+            if (x2 <= x1) return;
+            out += `<rect x="${x1.toFixed(1)}" y="0" width="${(x2 - x1).toFixed(1)}" height="${H}"
+                          fill="${path.color}" fill-opacity="0.06"/>`;
+        });
+        dividers.forEach(mx => {
+            const sx = mxToSx(mx);
+            if (sx <= 0 || sx >= W) return;
+            out += `<line x1="${sx.toFixed(1)}" y1="0" x2="${sx.toFixed(1)}" y2="${H}"
+                          stroke="#64748b" stroke-width="1" stroke-dasharray="5 4" opacity="0.45"/>`;
+        });
+        sortedLanes.forEach(([laneId, mx]) => {
+            const sx = mxToSx(mx);
+            if (sx < 30 || sx > W - 30) return;
+            const isCenter = laneId === 'center';
+            const label = isCenter ? '— required steps —' : laneId;
+            const color = isCenter ? '#94a3b8' : (paths.find(p => p.id === laneId)?.color || '#94a3b8');
+            out += `<text x="${sx.toFixed(1)}" y="22" text-anchor="middle"
+                          fill="${color}" font-size="14" font-family="system-ui,sans-serif"
+                          font-weight="600" opacity="0.85" letter-spacing="0.04em">${label}</text>`;
+        });
+        laneSvg.innerHTML = out;
+    }
 
-// Midpoints between adjacent lanes (model space) → become the divider lines
-const dividers = [];
-for (let i = 0; i < sortedLanes.length - 1; i++) {
-    dividers.push((sortedLanes[i][1] + sortedLanes[i + 1][1]) / 2);
+    currentDrawLanes = drawLanes;
+    cy.on('render', drawLanes);
+    window.addEventListener('resize', drawLanes);
+
+    /* ── Path list ── */
+    let lockedPath = null;
+    const pathList = document.getElementById('path-list');
+
+    function highlightPath(path) {
+        cy.edges().removeStyle('line-color').removeStyle('target-arrow-color').removeStyle('width');
+        cy.elements().addClass('dimmed');
+        new Set(path.nodes).forEach(id => cy.$id(id).removeClass('dimmed'));
+        new Set(path.edges).forEach(id => {
+            const e = cy.$id(id);
+            e.removeClass('dimmed');
+            e.style('line-color',         path.color);
+            e.style('target-arrow-color', path.color);
+            e.style('width',              3);
+        });
+    }
+
+    function clearHighlight() {
+        cy.elements().removeClass('dimmed');
+        cy.edges().removeStyle('line-color').removeStyle('target-arrow-color').removeStyle('width');
+    }
+
+    paths.forEach(path => {
+        const item = document.createElement('div');
+        item.className = 'path-item';
+        item.innerHTML = `
+            <span class="path-dot" style="background:${path.color}"></span>
+            <span class="path-label">${path.id}</span>
+            <span class="path-outcome outcome-${path.outcome}">${path.outcome}</span>
+        `;
+        item.addEventListener('mouseenter', () => { if (!lockedPath) highlightPath(path); });
+        item.addEventListener('mouseleave', () => { if (!lockedPath) clearHighlight(); });
+        item.addEventListener('click', () => {
+            if (lockedPath === path.id) {
+                lockedPath = null;
+                item.classList.remove('locked');
+                clearHighlight();
+            } else {
+                document.querySelectorAll('.path-item').forEach(el => el.classList.remove('locked'));
+                lockedPath = path.id;
+                item.classList.add('locked');
+                highlightPath(path);
+            }
+        });
+        pathList.appendChild(item);
+    });
+
+    /* ── Node interactions ── */
+    cy.on('mouseover', 'node', e => {
+        const cid = e.target.data('canonical_id');
+        (canonicalToElements[cid] || []).forEach(id => cy.$id(id).addClass('peer-hover'));
+    });
+    cy.on('mouseout', 'node', e => {
+        const cid = e.target.data('canonical_id');
+        (canonicalToElements[cid] || []).forEach(id => cy.$id(id).removeClass('peer-hover'));
+    });
+    cy.on('tap', 'node', e => {
+        const node   = e.target;
+        const cid    = node.data('canonical_id');
+        const newVal = !node.data('is_fixpoint');
+        (canonicalToElements[cid] || []).forEach(id => cy.$id(id).data('is_fixpoint', newVal));
+        cy.style().update();
+        renderDetail(node);
+    });
+    cy.on('cxttap', 'node', e => {
+        const node   = e.target;
+        const cid    = node.data('canonical_id');
+        const newVal = !node.data('user_important');
+        (canonicalToElements[cid] || []).forEach(id => cy.$id(id).data('user_important', newVal));
+        cy.style().update();
+        renderDetail(node);
+    });
+    cy.on('tap', e => { if (e.target === cy) detail.classList.remove('open'); });
 }
 
-function mxToSx(mx) { return mx * cy.zoom() + cy.pan().x; }
-
-function drawLanes() {
-    const W = cyWrap.clientWidth;
-    const H = cyWrap.clientHeight;
-    laneSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-
-    // Screen-space boundaries for background tints
-    const screenDiv = [-Infinity, ...dividers.map(mxToSx), Infinity];
-
-    let out = '';
-
-    // Per-lane background tint
-    sortedLanes.forEach(([laneId], i) => {
-        if (laneId === 'center') return;
-        const path = PATHS.find(p => p.id === laneId);
-        if (!path) return;
-        const x1 = Math.max(0, screenDiv[i]);
-        const x2 = Math.min(W, screenDiv[i + 1]);
-        if (x2 <= x1) return;
-        out += `<rect x="${x1.toFixed(1)}" y="0" width="${(x2 - x1).toFixed(1)}" height="${H}"
-                      fill="${path.color}" fill-opacity="0.06"/>`;
-    });
-
-    // Dashed divider lines
-    dividers.forEach(mx => {
-        const sx = mxToSx(mx);
-        if (sx <= 0 || sx >= W) return;
-        out += `<line x1="${sx.toFixed(1)}" y1="0" x2="${sx.toFixed(1)}" y2="${H}"
-                      stroke="#64748b" stroke-width="1" stroke-dasharray="5 4" opacity="0.45"/>`;
-    });
-
-    // Lane labels fixed near the top of the viewport
-    sortedLanes.forEach(([laneId, mx]) => {
-        const sx = mxToSx(mx);
-        if (sx < 30 || sx > W - 30) return;
-        const isCenter = laneId === 'center';
-        const label = isCenter ? '— required steps —' : laneId;
-        const color = isCenter ? '#94a3b8' : (PATHS.find(p => p.id === laneId)?.color || '#94a3b8');
-        out += `<text x="${sx.toFixed(1)}" y="22" text-anchor="middle"
-                      fill="${color}" font-size="14" font-family="system-ui,sans-serif"
-                      font-weight="600" opacity="0.85" letter-spacing="0.04em">${label}</text>`;
-    });
-
-    laneSvg.innerHTML = out;
-}
-
-cy.on('render', drawLanes);
-window.addEventListener('resize', drawLanes);
-
-/* ── Path list ────────────────────────────────────────────────────── */
-const pathList = document.getElementById('path-list');
-let lockedPath = null;
-
-PATHS.forEach(path => {
-    const item = document.createElement('div');
-    item.className = 'path-item';
-    item.innerHTML = `
-        <span class="path-dot" style="background:${path.color}"></span>
-        <span class="path-label">${path.id}</span>
-        <span class="path-outcome outcome-${path.outcome}">${path.outcome}</span>
-    `;
-
-    item.addEventListener('mouseenter', () => { if (!lockedPath) highlightPath(path); });
-    item.addEventListener('mouseleave', () => { if (!lockedPath) clearHighlight(); });
-    item.addEventListener('click', () => {
-        if (lockedPath === path.id) {
-            lockedPath = null;
-            item.classList.remove('locked');
-            clearHighlight();
-        } else {
-            document.querySelectorAll('.path-item').forEach(el => el.classList.remove('locked'));
-            lockedPath = path.id;
-            item.classList.add('locked');
-            highlightPath(path);
-        }
-    });
-
-    pathList.appendChild(item);
-});
-
-/* ── Path highlighting ────────────────────────────────────────────── */
-function highlightPath(path) {
-    cy.edges().removeStyle('line-color').removeStyle('target-arrow-color').removeStyle('width');
-    cy.elements().addClass('dimmed');
-
-    new Set(path.nodes).forEach(id  => cy.$id(id).removeClass('dimmed'));
-    new Set(path.edges).forEach(id  => {
-        const e = cy.$id(id);
-        e.removeClass('dimmed');
-        e.style('line-color',         path.color);
-        e.style('target-arrow-color', path.color);
-        e.style('width',              3);
-    });
-}
-
-function clearHighlight() {
-    cy.elements().removeClass('dimmed');
-    cy.edges().removeStyle('line-color').removeStyle('target-arrow-color').removeStyle('width');
-}
-
-/* ── Node interactions ────────────────────────────────────────────── */
-const detail  = document.getElementById('detail');
-const dLabel  = document.getElementById('d-label');
-const dType   = document.getElementById('d-type');
-const dBadges = document.getElementById('d-badges');
-const dMeta   = document.getElementById('d-meta');
-
-// Highlight all copies of the same logical node on hover
-cy.on('mouseover', 'node', e => {
-    const cid = e.target.data('canonical_id');
-    (canonicalToElements[cid] || []).forEach(id => cy.$id(id).addClass('peer-hover'));
-});
-cy.on('mouseout', 'node', e => {
-    const cid = e.target.data('canonical_id');
-    (canonicalToElements[cid] || []).forEach(id => cy.$id(id).removeClass('peer-hover'));
-});
-
-// Left-click: toggle required step (is_fixpoint) on all copies
-cy.on('tap', 'node', e => {
-    const node   = e.target;
-    const cid    = node.data('canonical_id');
-    const newVal = !node.data('is_fixpoint');
-    (canonicalToElements[cid] || []).forEach(id => cy.$id(id).data('is_fixpoint', newVal));
-    cy.style().update();
-    renderDetail(node);
-});
-
-// Right-click: toggle important (user_important) on all copies
-cy.on('cxttap', 'node', e => {
-    const node   = e.target;
-    const cid    = node.data('canonical_id');
-    const newVal = !node.data('user_important');
-    (canonicalToElements[cid] || []).forEach(id => cy.$id(id).data('user_important', newVal));
-    cy.style().update();
-    renderDetail(node);
-});
-
-document.getElementById('cy').addEventListener('contextmenu', e => e.preventDefault());
-
-cy.on('tap', e => { if (e.target === cy) detail.classList.remove('open'); });
-
+/* ── renderDetail ─────────────────────────────────────────────────── */
 function renderDetail(node) {
     const d = node.data();
     detail.classList.add('open');
@@ -559,6 +585,9 @@ function renderDetail(node) {
             .map(([k, v]) => `<dt>${k}</dt><dd>${typeof v === 'object' ? JSON.stringify(v) : v}</dd>`)
             .join('');
 }
+
+/* ── Prevent browser context menu on the graph ────────────────────── */
+document.getElementById('cy').addEventListener('contextmenu', e => e.preventDefault());
 
 /* ── Sync ─────────────────────────────────────────────────────────── */
 document.getElementById('sync-btn').addEventListener('click', async () => {
@@ -579,16 +608,35 @@ document.getElementById('sync-btn').addEventListener('click', async () => {
         const res  = await fetch('/api/sync', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ test_case_id: TEST_CASE_ID, updates }),
+            body:    JSON.stringify({ test_case_id: currentCaseId, updates }),
         });
         const json = await res.json();
         document.getElementById('sync-status').textContent = '';
         showToast(json.message, 'success');
+        await refreshCases();
     } catch (err) {
         document.getElementById('sync-status').textContent = '';
         showToast('Sync failed: ' + err.message, 'error');
     }
 });
+
+/* ── Refresh dropdown from server ─────────────────────────────────── */
+async function refreshCases() {
+    try {
+        const res   = await fetch('/api/cases');
+        if (!res.ok) return;
+        const data  = await res.json();
+        const cases = data.cases || [];
+        caseSelect.innerHTML = '';
+        cases.forEach(id => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = id;
+            opt.selected = (id === currentCaseId);
+            caseSelect.appendChild(opt);
+        });
+    } catch (_) { /* best-effort — ignore network errors */ }
+}
 
 /* ── Toast ────────────────────────────────────────────────────────── */
 function showToast(msg, type) {
@@ -597,6 +645,9 @@ function showToast(msg, type) {
     t.className = `show ${type}`;
     setTimeout(() => { t.className = ''; }, 3000);
 }
+
+/* ── Initial render ───────────────────────────────────────────────── */
+initGraph(INITIAL_ELEMENTS, INITIAL_PATHS, INITIAL_CASE_ID, INITIAL_DESC);
 </script>
 </body>
 </html>
@@ -604,18 +655,29 @@ function showToast(msg, type) {
 
 
 class HtmlViz:
-    def generate_html(self, graph: RunGraph) -> str:
+    def build_graph_data(self, graph: RunGraph) -> dict:
+        """Return elements, paths, and metadata for the JS frontend (used by /api/graph)."""
         node_cy_map = self._compute_node_cy_map(graph)
-        elements    = self._build_elements(graph, node_cy_map)
-        paths_data  = self._build_paths_data(graph, node_cy_map)
+        return {
+            "elements":     self._build_elements(graph, node_cy_map),
+            "paths":        self._build_paths_data(graph, node_cy_map),
+            "test_case_id": graph.test_case_id,
+            "description":  graph.description or "",
+        }
+
+    def generate_html(self, graph: RunGraph, cases: list[str] | None = None) -> str:
+        data       = self.build_graph_data(graph)
+        cases_list = sorted(cases) if cases else [graph.test_case_id]
 
         html = _HTML_TEMPLATE
         html = html.replace("__TITLE__",             f"Run Graph — {graph.test_case_id}")
         html = html.replace("__TEST_CASE_ID__",      graph.test_case_id)
         html = html.replace("__DESCRIPTION__",       graph.description or "")
         html = html.replace("__TEST_CASE_ID_JSON__", json.dumps(graph.test_case_id))
-        html = html.replace("__ELEMENTS_JSON__",     json.dumps(elements))
-        html = html.replace("__PATHS_JSON__",        json.dumps(paths_data))
+        html = html.replace("__ELEMENTS_JSON__",     json.dumps(data["elements"]))
+        html = html.replace("__PATHS_JSON__",        json.dumps(data["paths"]))
+        html = html.replace("__DESCRIPTION_JSON__",  json.dumps(data["description"]))
+        html = html.replace("__CASES_JSON__",        json.dumps(cases_list))
         return html
 
     def _compute_node_cy_map(self, graph: RunGraph) -> dict[str, dict]:
