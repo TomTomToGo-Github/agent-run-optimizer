@@ -1,0 +1,47 @@
+_schema_version: '2'
+test_case_id: my-task-name
+description: ''
+created_at: '2026-04-27'
+tags: []
+path_id: run-20260427-104801
+outcome: success
+timestamp: '2026-04-27T10:48:01.731288+00:00'
+duration_ms: 0
+metadata: {}
+node_sequence:
+- llm-1
+- llm-2
+edges:
+- from: llm-1
+  to: llm-2
+nodes:
+  llm-1:
+    type: llm
+    label: Initial Analysis
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: 666210238ffa9abb
+      input_tokens: 3
+      output_tokens: 12
+    cost:
+      cost_usd: 0.000189
+      kind: llm
+      input_tokens: 3
+      output_tokens: 12
+  llm-2:
+    type: llm
+    label: Final Response
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: 5f237a66d368900e
+      input_tokens: 3
+      output_tokens: 18
+    cost:
+      cost_usd: 0.000279
+      kind: llm
+      input_tokens: 3
+      output_tokens: 18

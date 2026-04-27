@@ -1,0 +1,171 @@
+_schema_version: '2'
+test_case_id: my-task-name
+description: ''
+created_at: '2026-04-27'
+tags: []
+path_id: run-20260427-105242
+outcome: success
+timestamp: '2026-04-27T10:52:42.703296+00:00'
+duration_ms: 5340
+metadata: {}
+node_sequence:
+- llm-1
+- llm-2
+- llm-3
+- tool-Read
+- llm-4
+- llm-5
+- llm-6
+- tool-Read-2
+- llm-7
+edges:
+- from: llm-1
+  to: llm-2
+- from: llm-2
+  to: llm-3
+- from: llm-3
+  to: tool-Read
+- from: tool-Read
+  to: llm-4
+- from: llm-4
+  to: llm-5
+- from: llm-5
+  to: llm-6
+- from: llm-6
+  to: tool-Read-2
+- from: tool-Read-2
+  to: llm-7
+nodes:
+  llm-1:
+    type: llm
+    label: Initial Analysis
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: 666210238ffa9abb
+      input_tokens: 3
+      output_tokens: 12
+    cost:
+      cost_usd: 0.000189
+      kind: llm
+      input_tokens: 3
+      output_tokens: 12
+  llm-2:
+    type: llm
+    label: Final Response
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: 5f237a66d368900e
+      input_tokens: 3
+      output_tokens: 18
+    cost:
+      cost_usd: 0.000279
+      kind: llm
+      input_tokens: 3
+      output_tokens: 18
+  llm-3:
+    type: llm
+    label: Final Response
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: e7a6c58db408ce4a
+      input_tokens: 3
+      output_tokens: 111
+    cost:
+      cost_usd: 0.001674
+      kind: llm
+      input_tokens: 3
+      output_tokens: 111
+  llm-4:
+    type: llm
+    label: Final Response
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: c3f54b089f0cf23b
+      input_tokens: 3
+      output_tokens: 111
+    cost:
+      cost_usd: 0.001674
+      kind: llm
+      input_tokens: 3
+      output_tokens: 111
+  llm-5:
+    type: llm
+    label: Plan & Act
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: 2070d2e6d06ca7a3
+      input_tokens: 3
+      output_tokens: 111
+    cost:
+      cost_usd: 0.001674
+      kind: llm
+      input_tokens: 3
+      output_tokens: 111
+  tool-Read:
+    type: tool
+    label: Read
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      tool: Read
+      tool_input_hash: 1056b493f736
+      result_truncated: '{''type'': ''text'', ''file'': {''filePath'': ''C:\\Workspace\\agent-run-optimizer\\README.md'',
+        ''content'': ''# agent-run-optimizer\n\nMake LLM agent executions observable,
+        replayable, and analyzable via graph-b'
+    cost:
+      latency_ms: 914.8960000000001
+      kind: tool
+  llm-6:
+    type: llm
+    label: Final Response
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: 484ce95dffe2f0de
+      input_tokens: 1
+      output_tokens: 8
+    cost:
+      cost_usd: 0.000123
+      kind: llm
+      input_tokens: 1
+      output_tokens: 8
+  tool-Read-2:
+    type: tool
+    label: Read
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      tool: Read
+      tool_input_hash: 1056b493f736
+      result_truncated: '{''type'': ''text'', ''file'': {''filePath'': ''C:\\Workspace\\agent-run-optimizer\\README.md'',
+        ''content'': ''# agent-run-optimizer\n\nMake LLM agent executions observable,
+        replayable, and analyzable via graph-b'
+    cost:
+      latency_ms: 856.798
+      kind: tool
+  llm-7:
+    type: llm
+    label: Final Response
+    is_fixpoint: false
+    user_important: false
+    metadata:
+      model: claude-sonnet-4-6
+      messages_hash: fa843cff385a80d7
+      input_tokens: 1
+      output_tokens: 76
+    cost:
+      cost_usd: 0.001143
+      kind: llm
+      input_tokens: 1
+      output_tokens: 76
