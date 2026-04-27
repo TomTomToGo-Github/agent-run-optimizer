@@ -1,0 +1,9 @@
+{
+  "session_id": "27a2fa83-1c0e-41ed-968e-877b5f919204",
+  "transcript_path": "C:\\Users\\thomas.haid\\.claude\\projects\\C--Workspace-agent-run-optimizer\\27a2fa83-1c0e-41ed-968e-877b5f919204.jsonl",
+  "cwd": "C:\\Workspace\\agent-run-optimizer",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "Hello! How can I help you today?"
+}

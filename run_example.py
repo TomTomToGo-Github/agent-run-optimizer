@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import socket
 import threading
-import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -108,9 +108,6 @@ def serve_and_open(
     handler = _make_handler(html, store, viz)
     server  = HTTPServer(("localhost", port), handler)
 
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-
     url = f"http://localhost:{port}"
     print()
     print("  AI Run Graph Visualization")
@@ -121,14 +118,20 @@ def serve_and_open(
     print("  Press Ctrl-C to stop")
     print()
 
-    webbrowser.open(url)
+    threading.Timer(0.3, lambda: webbrowser.open(url)).start()
 
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        server.shutdown()
-        print("\n  Server stopped.")
+    # shutdown() must be called from a different thread than serve_forever();
+    # the signal handler fires in the main thread context but we hand off to a
+    # daemon thread so serve_forever() can observe __shutdown_request and exit.
+    def _stop(sig, frame):
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGINT, _stop)
+    signal.signal(signal.SIGTERM, _stop)
+
+    server.serve_forever()
+    server.server_close()
+    print("\n  Server stopped.")
 
 
 def main() -> None:
